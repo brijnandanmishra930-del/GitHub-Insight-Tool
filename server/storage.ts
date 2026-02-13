@@ -1,38 +1,33 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import { githubAnalyses, type CreateGithubAnalysisRequest, type GithubAnalysisResponse } from "@shared/schema";
+import { desc, eq } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  listGithubAnalyses(limit?: number): Promise<GithubAnalysisResponse[]>;
+  getGithubAnalysis(id: string): Promise<GithubAnalysisResponse | undefined>;
+  createGithubAnalysis(input: Omit<GithubAnalysisResponse, "id" | "createdAt">): Promise<GithubAnalysisResponse>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async listGithubAnalyses(limit = 10): Promise<GithubAnalysisResponse[]> {
+    return await db
+      .select()
+      .from(githubAnalyses)
+      .orderBy(desc(githubAnalyses.createdAt))
+      .limit(limit);
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getGithubAnalysis(id: string): Promise<GithubAnalysisResponse | undefined> {
+    const [row] = await db.select().from(githubAnalyses).where(eq(githubAnalyses.id, id)).limit(1);
+    return row;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async createGithubAnalysis(
+    input: Omit<GithubAnalysisResponse, "id" | "createdAt">,
+  ): Promise<GithubAnalysisResponse> {
+    const [created] = await db.insert(githubAnalyses).values(input).returning();
+    return created;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
